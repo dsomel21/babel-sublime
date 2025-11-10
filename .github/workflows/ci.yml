@@ -114,7 +114,7 @@ jobs:
       - name: Check for common Python issues
         run: |
           # Check for potential issues in build.py
-          if grep -q "sublime.active_window()" build/build.py && ! grep -q "if.*active_window" build/build.py; then
+          if grep -q "sublime.active_window()" build/build.py && ! grep -q "if.*window.*is.*None\|if.*active_window" build/build.py; then
             echo "⚠ Warning: sublime.active_window() may return None"
           fi
           echo "✓ Basic code quality checks passed"
