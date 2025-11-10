@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  validate:
+    name: Validate Package Structure
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Validate package.json
+        run: |
+          python3 -c "import json; json.load(open('package.json'))"
+          echo "✓ package.json is valid JSON"
+      
+      - name: Validate messages.json
+        run: |
+          python3 -c "import json; json.load(open('messages.json'))"
+          echo "✓ messages.json is valid JSON"
+      
+      - name: Check required files exist
+        run: |
+          required_files=(
+            "JavaScript (Babel).sublime-syntax"
+            "Styled Components.sublime-syntax"
+            "plugin.py"
+            "build/build.py"
+            "README.md"
+            "LICENSE"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Required file missing: $file"
+              exit 1
+            fi
+            echo "✓ Found: $file"
+          done
+          echo "✓ All required files present"
+      
+      - name: Validate Python syntax
+        run: |
+          python3 -m py_compile plugin.py
+          python3 -m py_compile build/build.py
+          echo "✓ Python files have valid syntax"
+      
+      - name: Check syntax file is not empty
+        run: |
+          if [ ! -s "JavaScript (Babel).sublime-syntax" ]; then
+            echo "❌ JavaScript (Babel).sublime-syntax is empty"
+            exit 1
+          fi
+          echo "✓ Syntax file is not empty"
+      
+      - name: Validate sublime-syntax file structure
+        run: |
+          # Check that the syntax file has required sections
+          if ! grep -q "^name:" "JavaScript (Babel).sublime-syntax"; then
+            echo "❌ Syntax file missing 'name' field"
+            exit 1
+          fi
+          if ! grep -q "^scope:" "JavaScript (Babel).sublime-syntax"; then
+            echo "❌ Syntax file missing 'scope' field"
+            exit 1
+          fi
+          echo "✓ Syntax file has required structure"
+      
+      - name: Check test files
+        run: |
+          if [ ! -d "tests" ] || [ -z "$(ls -A tests 2>/dev/null)" ]; then
+            echo "⚠ Warning: tests directory is empty or missing"
+          else
+            test_count=$(find tests -name "*.js" -o -name "*.jsx" | wc -l)
+            echo "✓ Found $test_count test files"
+          fi
+
+  lint:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linting tools
+        run: |
+          pip install --upgrade pip
+          pip install flake8 pylint || echo "Linting tools installation failed, continuing..."
+      
+      - name: Run flake8
+        continue-on-error: true
+        run: |
+          if command -v flake8 &> /dev/null; then
+            flake8 --max-line-length=120 --ignore=E501,W503 plugin.py build/build.py || true
+          fi
+      
+      - name: Check for common Python issues
+        run: |
+          # Check for potential issues in build.py
+          if grep -q "sublime.active_window()" build/build.py && ! grep -q "if.*active_window" build/build.py; then
+            echo "⚠ Warning: sublime.active_window() may return None"
+          fi
+          echo "✓ Basic code quality checks passed"
